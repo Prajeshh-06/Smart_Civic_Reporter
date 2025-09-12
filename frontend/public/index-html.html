@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chennai Civic Watch</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons for UI elements -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Leaflet.js for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+        }
+        /* Custom styles for leaflet map */
+        #submissionMap, #detailMap {
+            height: 300px;
+            border-radius: 0.5rem;
+        }
+        #main-map-view-container {
+            height: calc(100vh - 200px); /* Adjust based on header/footer/filter height */
+            min-height: 500px;
+        }
+        .leaflet-grab { cursor: grab; }
+        .leaflet-dragging .leaflet-grab { cursor: grabbing; }
+        .hidden { display: none; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        .view-tab.active {
+            border-bottom-color: #3b82f6;
+            color: #3b82f6;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header -->
+    <header class="bg-white shadow-md sticky top-0 z-20">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+                        <span class="text-xl font-bold text-gray-800">Chennai Civic Watch</span>
+                    </div>
+                </div>
+                <div id="header-actions" class="flex items-center">
+                    <!-- Actions will be injected here based on login state -->
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- View: Login Page -->
+        <div id="login-view">
+            <div class="max-w-md mx-auto mt-10 bg-white p-8 rounded-lg shadow-xl">
+                <h2 class="text-2xl font-bold text-center text-gray-900 mb-2">Welcome Back</h2>
+                <p class="text-center text-gray-600 mb-8">Sign in to access the dashboard.</p>
+                <form id="login-form">
+                    <div class="space-y-6">
+                        <div>
+                            <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                            <input type="text" id="username" name="username" required value="citizen" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" id="password" name="password" required value="password123" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <p id="login-error" class="text-sm text-red-600"></p>
+                         <div class="text-xs text-gray-500">
+                            <p><strong>Note:</strong> This is a demo login. For this version, any non-empty username and password will work.</p>
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Login
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Main Application View (hidden until login) -->
+        <div id="app-view" class="hidden">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Community Dashboard</h1>
+            <p class="text-gray-600 mb-6">Visualizing civic issues reported across Chennai.</p>
+            
+            <!-- View Toggler (List/Map) -->
+            <div class="mb-6 border-b border-gray-200">
+                <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                    <button id="show-list-view-btn" class="view-tab active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2">
+                        <i data-lucide="list"></i> List View
+                    </button>
+                    <button id="show-map-view-btn" class="view-tab whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 flex items-center gap-2">
+                        <i data-lucide="map"></i> Map View
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Filters (Shared between List and Map) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 bg-white rounded-lg shadow">
+                <!-- Filter controls here -->
+                 <div>
+                    <label for="status-filter" class="block text-sm font-medium text-gray-700">Filter by Status</label>
+                    <select id="status-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+                        <option value="">All Statuses</option>
+                        <option>Open</option>
+                        <option>Acknowledged</option>
+                        <option>In Progress</option>
+                        <option>Resolved</option>
+                        <option>Closed</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="ward-filter" class="block text-sm font-medium text-gray-700">Filter by Ward</label>
+                    <select id="ward-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+                        <option value="">All Wards</option>
+                    </select>
+                </div>
+                 <div>
+                    <label for="issue-type-filter" class="block text-sm font-medium text-gray-700">Filter by Type</label>
+                    <select id="issue-type-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+                        <option value="">All Types</option>
+                        <option value="roads">Roads</option>
+                        <option value="infrastructure">Infrastructure</option>
+                        <option value="utilities">Utilities</option>
+                        <option value="waste">Waste</option>
+                        <option value="water">Water</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+            
+             <div id="loader" class="flex justify-center items-center h-64">
+                <div class="loader"></div>
+            </div>
+
+            <!-- View: List of Reports -->
+            <div id="reports-list-view">
+                <div id="reports-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+            
+            <!-- View: Map of Reports -->
+            <div id="main-map-view" class="hidden">
+                 <div id="main-map-view-container" class="w-full bg-gray-200 rounded-lg shadow-md"></div>
+            </div>
+            
+            <p id="no-reports-message" class="text-center text-gray-500 mt-8 hidden">No reports found matching your criteria.</p>
+
+        </div>
+
+        <!-- View: Report Submission Form -->
+        <div id="report-form-view" class="hidden">
+            <button id="back-to-list-btn" class="text-blue-600 hover:text-blue-800 mb-6 flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i> Back to Dashboard
+            </button>
+            <div class="bg-white p-8 rounded-lg shadow-lg max-w-3xl mx-auto">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Submit a New Report</h2>
+                <form id="report-form" class="space-y-6">
+                    <!-- Form fields from previous version -->
+                     <div>
+                        <label for="title" class="block text-sm font-medium text-gray-700">Report Title</label>
+                        <input type="text" id="title" name="title" required placeholder="e.g., Large pothole on Main Street" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="issue_type" class="block text-sm font-medium text-gray-700">Issue Type</label>
+                        <select id="issue_type" name="issue_type" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+                            <option value="roads">Roads</option>
+                            <option value="infrastructure">Infrastructure</option>
+                            <option value="utilities">Utilities</option>
+                            <option value="waste">Waste Management</option>
+                            <option value="water">Water Supply/Drainage</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+                        <textarea id="description" name="description" rows="4" placeholder="Provide more details about the issue..." class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Location</label>
+                        <p class="text-sm text-gray-500 mb-2">Drag the pin to the exact location of the issue.</p>
+                        <div id="submissionMap"></div>
+                        <input type="hidden" id="latitude" name="latitude">
+                        <input type="hidden" id="longitude" name="longitude">
+                    </div>
+                    <div>
+                        <label for="image_url" class="block text-sm font-medium text-gray-700">Image URL (Optional)</label>
+                        <input type="text" id="image_url" name="image_url" placeholder="https://example.com/image.jpg" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+                    <button type="submit" id="submit-btn" class="w-full bg-blue-600 text-white py-3 px-4 rounded-md shadow-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300">
+                        Submit Report
+                    </button>
+                    <div id="form-message" class="text-center"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- View: Report Details -->
+        <div id="report-detail-view" class="hidden">
+             <button id="back-to-list-from-detail-btn" class="text-blue-600 hover:text-blue-800 mb-6 flex items-center gap-2">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i> Back to Dashboard
+            </button>
+            <div id="detail-content" class="bg-white p-6 sm:p-8 rounded-lg shadow-lg max-w-4xl mx-auto"></div>
+        </div>
+
+    </main>
+
+    <!-- Modal for messages -->
+    <div id="message-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+      <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+          <div id="modal-icon" class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100"></div>
+          <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900 mt-2"></h3>
+          <p id="modal-message" class="text-sm text-gray-500 mt-2 px-7 py-3"></p>
+          <button id="modal-close-btn" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-600">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONFIGURATION ---
+            const API_BASE_URL = 'http://localhost:3000/api';
+            const CHENNAI_COORDS = [13.0827, 80.2707];
+
+            // --- STATE ---
+            let allReportsData = [];
+            let mainMap, submissionMap, detailMap;
+            let submissionMarker;
+            let reportMarkersLayer = L.layerGroup();
+
+            // --- ELEMENT SELECTORS ---
+            const views = {
+                login: document.getElementById('login-view'),
+                app: document.getElementById('app-view'),
+                form: document.getElementById('report-form-view'),
+                detail: document.getElementById('report-detail-view')
+            };
+            const mainViews = {
+                list: document.getElementById('reports-list-view'),
+                map: document.getElementById('main-map-view')
+            };
+
+            const headerActions = document.getElementById('header-actions');
+            const loginForm = document.getElementById('login-form');
+            const loginError = document.getElementById('login-error');
+            const loader = document.getElementById('loader');
+            const reportsContainer = document.getElementById('reports-container');
+            const noReportsMessage = document.getElementById('no-reports-message');
+            const statusFilter = document.getElementById('status-filter');
+            const wardFilter = document.getElementById('ward-filter');
+            const issueTypeFilter = document.getElementById('issue-type-filter');
+            const showListViewBtn = document.getElementById('show-list-view-btn');
+            const showMapViewBtn = document.getElementById('show-map-view-btn');
+            const backToListBtn = document.getElementById('back-to-list-btn');
+            const backFromDetailBtn = document.getElementById('back-to-list-from-detail-btn');
+            const reportForm = document.getElementById('report-form');
+            const submitBtn = document.getElementById('submit-btn');
+
+            // --- UTILITY FUNCTIONS ---
+            const showView = (viewName) => {
+                Object.values(views).forEach(view => view.classList.add('hidden'));
+                if (views[viewName]) views[viewName].classList.remove('hidden');
+                window.scrollTo(0, 0);
+            };
+
+            const showMainView = (mainViewName) => {
+                Object.values(mainViews).forEach(view => view.classList.add('hidden'));
+                if (mainViews[mainViewName]) mainViews[mainViewName].classList.remove('hidden');
+
+                showListViewBtn.classList.toggle('active', mainViewName === 'list');
+                showMapViewBtn.classList.toggle('active', mainViewName === 'map');
+                
+                if (mainViewName === 'map' && mainMap) {
+                    setTimeout(() => mainMap.invalidateSize(), 0);
+                }
+            };
+
+            const updateHeader = (isLoggedIn) => {
+                if (isLoggedIn) {
+                    headerActions.innerHTML = `
+                        <button id="report-issue-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2">
+                            <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                            <span class="hidden sm:block">Report Issue</span>
+                        </button>
+                        <button id="logout-btn" class="ml-4 text-gray-500 hover:text-gray-800 flex items-center gap-2">
+                            <i data-lucide="log-out" class="w-5 h-5"></i>
+                            <span class="hidden sm:block">Logout</span>
+                        </button>`;
+                    document.getElementById('report-issue-btn').addEventListener('click', handleShowReportForm);
+                    document.getElementById('logout-btn').addEventListener('click', handleLogout);
+                } else {
+                    headerActions.innerHTML = '';
+                }
+                lucide.createIcons();
+            };
+            
+            const getStatusColor = (status) => {
+                switch (status) {
+                    case 'Open': return 'bg-red-100 text-red-800';
+                    case 'Acknowledged': return 'bg-yellow-100 text-yellow-800';
+                    case 'In Progress': return 'bg-blue-100 text-blue-800';
+                    case 'Resolved': return 'bg-green-100 text-green-800';
+                    case 'Closed': return 'bg-gray-100 text-gray-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                }
+            };
+            const getIconForType = (type) => {
+                 const icons = { roads: 'road', infrastructure: 'building-2', utilities: 'bolt', waste: 'trash-2', water: 'droplets', other: 'alert-circle' };
+                return icons[type] || 'alert-circle';
+            }
+            const showModal = (title, message, isSuccess = true) => {
+                const modal = document.getElementById('message-modal');
+                document.getElementById('modal-title').textContent = title;
+                document.getElementById('modal-message').textContent = message;
+                const iconContainer = document.getElementById('modal-icon');
+                if (isSuccess) {
+                    iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100';
+                    iconContainer.innerHTML = `<i data-lucide="check" class="h-6 w-6 text-green-600"></i>`;
+                } else {
+                    iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100';
+                    iconContainer.innerHTML = `<i data-lucide="alert-triangle" class="h-6 w-6 text-red-600"></i>`;
+                }
+                lucide.createIcons();
+                modal.classList.remove('hidden');
+                document.getElementById('modal-close-btn').onclick = () => modal.classList.add('hidden');
+            };
+
+            // --- API & DATA FUNCTIONS ---
+            const fetchWards = async () => { 
+                try {
+                    const response = await fetch(`${API_BASE_URL}/wards`);
+                    if (!response.ok) throw new Error('Failed to fetch wards');
+                    const data = await response.json();
+                    if(data.success && data.wards) {
+                        wardFilter.innerHTML = '<option value="">All Wards</option>';
+                        data.wards.forEach(ward => {
+                            const option = document.createElement('option');
+                            option.value = ward;
+                            option.textContent = ward;
+                            wardFilter.appendChild(option);
+                        });
+                    }
+                } catch (error) { console.error('Error fetching wards:', error); }
+            };
+
+            const fetchAndRenderReports = async () => {
+                loader.style.display = 'flex';
+                // Hide main views and messages, and clear the list container
+                Object.values(mainViews).forEach(view => view.classList.add('hidden'));
+                noReportsMessage.classList.add('hidden');
+                reportsContainer.innerHTML = '';
+
+                const params = new URLSearchParams();
+                if (statusFilter.value) params.set('status', statusFilter.value);
+                else if (wardFilter.value) params.set('ward', wardFilter.value);
+                else if (issueTypeFilter.value) params.set('issue_type', issueTypeFilter.value);
+
+                try {
+                    const res = await fetch(`${API_BASE_URL}/reports?${params.toString()}`);
+                    const data = await res.json();
+                    
+                    allReportsData = data.success ? data.reports : [];
+                    
+                    if (allReportsData.length > 0) {
+                        renderReportsList(allReportsData);
+                        renderReportMarkers(allReportsData);
+                    } else {
+                        noReportsMessage.classList.remove('hidden');
+                        reportMarkersLayer.clearLayers();
+                    }
+                    
+                } catch (error) {
+                    console.error("Failed to fetch reports:", error);
+                    showModal('Error', 'Could not fetch reports from the server.', false);
+                } finally {
+                    loader.style.display = 'none';
+                    // Show the currently active main view (list or map)
+                    const activeView = showMapViewBtn.classList.contains('active') ? 'map' : 'list';
+                    showMainView(activeView);
+                }
+            };
+            
+            const fetchReportDetails = async (reportId) => {
+                showView('detail');
+                const detailContent = document.getElementById('detail-content');
+                detailContent.innerHTML = '<div class="flex justify-center items-center h-64"><div class="loader"></div></div>';
+                try {
+                    const response = await fetch(`${API_BASE_URL}/reports/${reportId}`);
+                    if (!response.ok) throw new Error('Report not found');
+                    const data = await response.json();
+                    if (data.success) renderReportDetails(data.report);
+                    else throw new Error(data.message || 'Failed to fetch report details');
+                } catch (error) {
+                    console.error('Error fetching report details:', error);
+                    detailContent.innerHTML = `<p class="text-red-500 text-center">${error.message}</p>`;
+                }
+            };
+            
+            const submitReport = async (formData) => {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+                try {
+                    const response = await fetch(`${API_BASE_URL}/reports`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                    const result = await response.json();
+                    if (response.status === 201 && result.success) {
+                        showModal('Success!', 'Your report has been submitted successfully.');
+                        reportForm.reset();
+                        showView('app');
+                        // Fetch all reports again to show the new one
+                        statusFilter.value = '';
+                        wardFilter.value = '';
+                        issueTypeFilter.value = '';
+                        fetchAndRenderReports();
+                    } else {
+                        throw new Error(result.message || 'An unknown error occurred.');
+                    }
+                } catch (error) {
+                    showModal('Submission Failed', error.message, false);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Report';
+                }
+            };
+            
+            const boostReport = async (reportId) => {
+                const boostButton = document.querySelector(`button[data-boost-id="${reportId}"]`);
+                const boostsCountSpan = document.getElementById(`boosts-count-${reportId}`);
+                if (boostButton.disabled) return;
+                boostButton.disabled = true;
+                try {
+                    const response = await fetch(`${API_BASE_URL}/reports/${reportId}/boost`, { method: 'POST' });
+                    const result = await response.json();
+                    if (response.ok && result.success) {
+                       const currentBoosts = parseInt(boostsCountSpan.textContent, 10);
+                       boostsCountSpan.textContent = currentBoosts + 1;
+                       showModal('Boosted!', 'You have successfully boosted this issue.');
+                    } else {
+                        throw new Error(result.message || 'Failed to boost');
+                    }
+                } catch (error) {
+                     showModal('Error', error.message, false);
+                     boostButton.disabled = false;
+                }
+            };
+
+            // --- RENDER FUNCTIONS ---
+            const renderReportsList = (reports) => {
+                reportsContainer.innerHTML = reports.map(report => `
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden transform hover:-translate-y-1 transition-transform duration-200 flex flex-col">
+                        ${report.image_url ? `<img src="${report.image_url}" alt="${report.title}" class="h-48 w-full object-cover" onerror="this.style.display='none'">` : ''}
+                        <div class="p-4 flex flex-col flex-grow">
+                             <div class="flex items-center gap-2 text-sm text-gray-500 mb-2"><i data-lucide="${getIconForType(report.issue_type)}" class="w-4 h-4"></i><span>${report.issue_type.charAt(0).toUpperCase() + report.issue_type.slice(1)}</span></div>
+                            <h3 class="text-lg font-bold text-gray-900 mb-2">${report.title}</h3>
+                            <div class="flex items-center justify-between text-sm text-gray-600 mb-4">
+                               <span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(report.status)}">${report.status}</span>
+                               <span class="flex items-center gap-1"><i data-lucide="flame" class="w-4 h-4 text-orange-500"></i>${report.boosts || 0}</span>
+                            </div>
+                            <p class="text-sm text-gray-500 mb-4">${report.assigned_to}</p>
+                            <div class="mt-auto pt-4 border-t border-gray-100 flex justify-between items-center">
+                                <p class="text-xs text-gray-400">On ${new Date(report.timestamp).toLocaleDateString()}</p>
+                                <button class="view-details-btn bg-blue-50 text-blue-600 px-3 py-1 rounded-md text-sm font-medium hover:bg-blue-100" data-report-id="${report.id}">Details</button>
+                            </div>
+                        </div>
+                    </div>`).join('');
+                lucide.createIcons();
+            };
+            
+            const renderReportMarkers = (reports) => {
+                reportMarkersLayer.clearLayers();
+                reports.forEach(report => {
+                    const marker = L.marker([report.latitude, report.longitude]);
+                    marker.bindPopup(`<b>${report.title}</b><br>${report.status}<br><button class="view-details-btn-map" data-report-id="${report.id}">View Details</button>`);
+                    reportMarkersLayer.addLayer(marker);
+                });
+            };
+            
+            const renderReportDetails = (report) => {
+                const detailContent = document.getElementById('detail-content');
+                const updatesHtml = report.updates && report.updates.length > 0 ? report.updates.map(update => `
+                    <li class="mb-6 ms-4">
+                        <div class="absolute w-3 h-3 bg-gray-300 rounded-full mt-1.5 -start-1.5 border border-white"></div>
+                        <time class="mb-1 text-sm font-normal leading-none text-gray-500">${new Date(update.timestamp.seconds ? update.timestamp.seconds * 1000 : update.timestamp).toLocaleString()}</time>
+                        <h3 class="text-lg font-semibold text-gray-900">${update.message}</h3>
+                    </li>`).join('') : '<li>No updates yet.</li>';
+                detailContent.innerHTML = `
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2">
+                            <span class="px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(report.status)}">${report.status}</span>
+                            <h2 class="text-3xl font-bold text-gray-900 mt-2 mb-4">${report.title}</h2>
+                            <p class="text-gray-600 mb-6">${report.description}</p>
+                            <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Issue History</h3>
+                            <ol class="relative border-s border-gray-200">${updatesHtml}</ol>
+                        </div>
+                        <div class="space-y-6">
+                            ${report.image_url ? `<img src="${report.image_url}" alt="${report.title}" class="rounded-lg shadow-md w-full object-cover">` : ''}
+                            <div class="bg-gray-50 p-4 rounded-lg"><h4 class="font-bold text-gray-800 mb-2">Details</h4><ul class="text-sm space-y-2 text-gray-700">
+                                <li class="flex justify-between"><span>Ward:</span> <strong>${report.assigned_to}</strong></li>
+                                <li class="flex justify-between"><span>Officer:</span> <strong>${report.assigned_officer || 'N/A'}</strong></li>
+                            </ul></div>
+                            <div id="detailMap" class="h-48"></div>
+                            <button data-boost-id="${report.id}" class="w-full bg-orange-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 hover:bg-orange-600">
+                                <i data-lucide="flame"></i> Boost Issue (<span id="boosts-count-${report.id}">${report.boosts || 0}</span>)
+                            </button>
+                        </div>
+                    </div>`;
+                displayDetailMap([report.latitude, report.longitude], report.title);
+                lucide.createIcons();
+            };
+
+
+            // --- MAP FUNCTIONS ---
+            const initMainMapView = () => {
+                if(mainMap) return;
+                mainMap = L.map('main-map-view-container').setView(CHENNAI_COORDS, 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(mainMap);
+                reportMarkersLayer.addTo(mainMap);
+            };
+
+            const initSubmissionMap = () => {
+                if (submissionMap) { submissionMap.remove(); }
+                submissionMap = L.map('submissionMap').setView(CHENNAI_COORDS, 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(submissionMap);
+                submissionMarker = L.marker(CHENNAI_COORDS, { draggable: true }).addTo(submissionMap);
+                const updateLatLng = (latlng) => {
+                    document.getElementById('latitude').value = latlng.lat;
+                    document.getElementById('longitude').value = latlng.lng;
+                };
+                updateLatLng(submissionMarker.getLatLng());
+                submissionMarker.on('dragend', (e) => updateLatLng(e.target.getLatLng()));
+            };
+            
+            const displayDetailMap = (coords, title) => {
+                if (detailMap) detailMap.remove();
+                detailMap = L.map('detailMap', { scrollWheelZoom: false, dragging: false, zoomControl: false }).setView(coords, 16);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailMap);
+                L.marker(coords).addTo(detailMap).bindPopup(title);
+            };
+
+            // --- EVENT HANDLERS ---
+            const handleLogin = (e) => {
+                e.preventDefault();
+                const username = e.target.username.value;
+                const password = e.target.password.value;
+                if (username.trim() && password.trim()) {
+                    loginError.textContent = '';
+                    showView('app');
+                    updateHeader(true);
+                    fetchWards();
+                    fetchAndRenderReports();
+                    initMainMapView();
+                } else {
+                    loginError.textContent = 'Please enter a username and password.';
+                }
+            };
+            
+            const handleLogout = () => {
+                allReportsData = [];
+                updateHeader(false);
+                showView('login');
+                loginForm.reset();
+            };
+
+            const handleShowReportForm = () => {
+                showView('form');
+                initSubmissionMap();
+                setTimeout(() => submissionMap.invalidateSize(), 0);
+            };
+
+            // --- EVENT LISTENERS ---
+            loginForm.addEventListener('submit', handleLogin);
+            showListViewBtn.addEventListener('click', () => showMainView('list'));
+            showMapViewBtn.addEventListener('click', () => showMainView('map'));
+            [statusFilter, wardFilter, issueTypeFilter].forEach(filter => {
+                filter.addEventListener('change', fetchAndRenderReports);
+            });
+            backToListBtn.addEventListener('click', () => showView('app'));
+            backFromDetailBtn.addEventListener('click', () => showView('app'));
+            reportForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const data = Object.fromEntries(new FormData(e.target).entries());
+                data.latitude = parseFloat(data.latitude);
+                data.longitude = parseFloat(data.longitude);
+                if (!data.latitude) { showModal('Location Missing', 'Please select a location.', false); return; }
+                submitReport(data);
+            });
+            
+            document.body.addEventListener('click', (e) => {
+                const detailBtn = e.target.closest('.view-details-btn, .view-details-btn-map');
+                const boostBtn = e.target.closest('button[data-boost-id]');
+                if (detailBtn) fetchReportDetails(detailBtn.dataset.reportId);
+                if (boostBtn) boostReport(boostBtn.dataset.boostId);
+            });
+
+
+            // --- INITIALIZATION ---
+            const init = () => {
+                lucide.createIcons();
+                updateHeader(false);
+                showView('login');
+            };
+
+            init();
+        });
+    </script>
+</body>
+</html>
+
